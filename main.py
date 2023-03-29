@@ -1,3 +1,7 @@
+from ultralytics import YOLO
+import time
+import math
+import cv2 as cv
 import numpy as np
 
 def processOneImage(specifiedRegions, boundingBoxes, timeSeries):
@@ -17,10 +21,10 @@ def processOneImage(specifiedRegions, boundingBoxes, timeSeries):
 
 def isBoundingBoxInRegion(box, region):
 
-    # Assumes boxes and regions given in format [number,x1,y1,x2,y2]
-    center = [(box[1] + box[3]) / 2, (box[2] + box[4]) / 2]  # Average x and y boundaries of bounding box to get its center
-    if (center[0] <= region[1] and center[0] >= region[3] or center[0] >= region[1] and center[0] <= region[3]) and (
-            center[1] <= region[2] and center[1] >= region[4] or center[1] <= region[2] and center[1] >= region[4]):
+    # Assumes boxes given in format [x1,y1,x2,y2] and regions given in format [number,x1,y1,x2,y2]
+    center = [(box[0] + box[2]) / 2, (box[1] + box[3]) / 2]  # Average x and y boundaries of bounding box to get its center
+    if (center[0] <= region[0] and center[0] >= region[2] or center[0] >= region[0] and center[0] <= region[2]) and (
+            center[1] <= region[1] and center[1] >= region[3] or center[1] <= region[1] and center[1] >= region[3]):
         return True
     return False
 
@@ -43,7 +47,6 @@ def generateWarnings(specifiedRegions, timeSeries, occupancyValueLimit, occupanc
                         specifiedRegions[i]) + ") - Long-Term Occupancy Increase Has Exceeded Limit")
 
 
-
 def main():
 
     specifiedRegions = []  # List containing lists - each element is a list corresponding to one region and contains its coordinates
@@ -56,13 +59,22 @@ def main():
     occupancyShortTermIncreaseLimit = 10
     occupancyLongTermIncreaseLimit = 50
 
-    while(True):
+    model = YOLO("yolov8n.pt")  # model
+    results = model("C:/Users/CPS/Pictures/capstone image collections/datasets/Yard 3 3-6-2023/image30.png")  # predict on an image
+    boxes = []
+    for res in results:
+        for i in range(len(res.boxes.cls)):
+            if res.boxes.cls[i] == 0:
+                boxes.append(res.boxes.xyxy[i])
 
-        # PLACEHOLDER for Receiving New Image
+        if not specifiedRegions:
+            imageLength = 700
+            imageWidth = 700
+            specifiedRegions.append([0, 0, int(imageWidth/2), int(imageLength/2)])
+            specifiedRegions.append([0, int(imageLength / 2), int(imageWidth / 2), imageLength-1])
+            specifiedRegions.append([int(imageWidth / 2), 0, imageWidth-1, int(imageLength/2)])
+            specifiedRegions.append([int(imageWidth / 2), int(imageLength / 2), imageWidth-1, imageLength-1])
 
-        # PLACEHOLDER for YOLO computation generating bounding boxes:
-        boundingBoxes = []  # List containing lists - each element is a list corresponding to one bounding box and contains its coordinates
-
-        timeSeries = processOneImage(specifiedRegions, boundingBoxes, timeSeries)
+        timeSeries = processOneImage(specifiedRegions, boxes, timeSeries)
 
         generateWarnings(specifiedRegions, timeSeries, occupancyValueLimit, occupancyShortTermIncreaseLimit, occupancyLongTermIncreaseLimit)
