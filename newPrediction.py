@@ -10,8 +10,7 @@ def processOneImage(specifiedRegions, boundingBoxes, timeSeries, computeVectors)
     regionCounts = np.zeros(len(specifiedRegions))
     for box in boundingBoxes:
         for i in range(len(specifiedRegions)):
-            if isBoundingBoxInRegion(box, specifiedRegions[i]):
-                regionCounts[i] += abs(box[2] - box[4])
+            regionCounts[i] += (box[2] - box[4]) ** 2 * computeFractionOfIntersection(specifiedRegions[i], box)
 
     for i in range(len(timeSeries)):
         np.append(timeSeries[i], regionCounts[i])
@@ -24,24 +23,18 @@ def processOneImage(specifiedRegions, boundingBoxes, timeSeries, computeVectors)
     return timeSeries, vectors
 
 
-def isBoundingBoxInRegion(box, region):
-    # Assumes boxes given in format [x1,y1,x2,y2] and regions given in format [x1,y1,x2,y2]
-    center = [(box[0] + box[2]) / 2,
-              (box[1] + box[3]) / 2]  # Average x and y boundaries of bounding box to get its center
-    if (center[0] <= region[0] and center[0] >= region[2] or center[0] >= region[0] and center[0] <= region[2]) and (
-            center[1] <= region[1] and center[1] >= region[3] or center[1] <= region[1] and center[1] >= region[3]):
-        return True
-    return False
-
-
 def prediction(specifiedRegions, vectors, numIterationsAhead, predictedTimeSeries, horizontalDispersion, verticalDispersion):
-    # Assumes vectors given in format [x1,y1,x2,y2,height] and regions given in format [x1,y1,x2,y2]
+    # Assumes vectors given in format [x1,y1,x2,y2,width,height] and regions given in format [x1,y1,x2,y2]
     regionCounts = np.zeros(len(specifiedRegions))
     for vector in vectors:
         predictedCenter = [(vector[2] - vector[0]) * numIterationsAhead + vector[0],
                            (vector[3] - vector[1]) * numIterationsAhead + vector[1]]
         for i in range(len(specifiedRegions)):
-            regionCounts[i] += vector[4] ** 2 * computeFractionOfIntersection(specifiedRegions[i], predictedCenter, horizontalDispersion, verticalDispersion)
+            box = [predictedCenter[0] - vector[4] / 2 - horizontalDispersion,
+                   predictedCenter[1] - vector[5] / 2 - verticalDispersion,
+                   predictedCenter[0] + vector[4] / 2 + horizontalDispersion,
+                   predictedCenter[1] + vector[5] / 2 + verticalDispersion]
+            regionCounts[i] += vector[5] ** 2 * computeFractionOfIntersection(specifiedRegions[i], box)
 
     for i in range(len(predictedTimeSeries)):
         np.append(predictedTimeSeries[i], regionCounts[i])
@@ -49,11 +42,11 @@ def prediction(specifiedRegions, vectors, numIterationsAhead, predictedTimeSerie
     return predictedTimeSeries
 
 
-def computeFractionOfIntersection(region, center, horizontalDispersion, verticalDispersion):
+def computeFractionOfIntersection(region, box):
 
-    # Assumes regions given in format [x1,y1,x2,y2]
-    upperLeft = [center[0] - horizontalDispersion/2, center[1] - verticalDispersion/2]
-    lowerRight = [center[0] + horizontalDispersion/2, center[1] + verticalDispersion/2]
+    # Assumes region and box given in format [x1,y1,x2,y2]
+    upperLeft = [box[0], box[1]]
+    lowerRight = [box[2], box[3]]
 
     if upperLeft[0] >= region[2] or upperLeft[1] >= region[3] or lowerRight[0] <= region[0] or lowerRight[1] <= region[1]:
         return 0
@@ -103,8 +96,8 @@ def main():
     currentDensityLimit = 100
     predictedDensityLimit = 100
     numIterationsAhead = 5
-    horizontalDispersion = 100
-    verticalDispersion = 100
+    horizontalDispersion = 30
+    verticalDispersion = 30
 
     model = YOLO("yolov8n.pt")  # model
     results = model(
